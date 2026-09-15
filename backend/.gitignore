@@ -1,0 +1,4 @@
+node_modules/
+.env
+private_storage/*
+!private_storage/.gitkeep

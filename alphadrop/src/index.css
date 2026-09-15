@@ -1,0 +1,84 @@
+@import 'tailwindcss';
+
+:root {
+  --bg: #f3f8ff;
+  --bg-strong: #eaf3ff;
+  --surface: #ffffff;
+  --surface-strong: #ffffff;
+  --border: #dfeeff;
+  --text: #0f172a;
+  --muted: #475569;
+  --blue: #1677ff;
+  --blue-deep: #0f3d9c;
+  --navy: #071a37;
+  color: var(--text);
+  background: var(--bg);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html {
+  background: linear-gradient(180deg, #ffffff 0%, #edf6ff 100%);
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: linear-gradient(180deg, #ffffff 0%, #edf6ff 100%);
+  color: var(--text);
+  font-family: Inter, 'Segoe UI', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.5);
+  border-radius: 999px;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+@layer components {
+  .glass-panel {
+    @apply border border-[#dfeeff] bg-white shadow-[0_12px_28px_rgba(15,61,156,0.06)];
+  }
+
+  .sidebar-link {
+    @apply flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-200 transition duration-200 hover:bg-white/10 hover:text-white;
+  }
+
+  .sidebar-link.active {
+    @apply bg-[#0f6ce5] text-white ring-1 ring-[#7eb5ff] shadow-[0_12px_24px_rgba(15,108,229,0.28)];
+  }
+
+  .kpi-card {
+    @apply rounded-2xl border border-[#dfeeff] bg-white p-5 shadow-[0_12px_28px_rgba(15,61,156,0.06)] transition duration-200 hover:-translate-y-1 hover:shadow-[0_18px_28px_rgba(15,61,156,0.12)];
+  }
+
+  .primary-button {
+    @apply rounded-xl bg-gradient-to-r from-[#0f6ce5] to-[#0c2d64] px-4 py-3 font-semibold text-white shadow-[0_10px_24px_rgba(15,108,229,0.22)] transition duration-200 hover:-translate-y-0.5 hover:brightness-105;
+  }
+
+  .secondary-button {
+    @apply rounded-xl border border-blue-200 bg-white px-4 py-3 font-semibold text-blue-700 transition duration-200 hover:-translate-y-0.5 hover:border-blue-300 hover:bg-blue-50;
+  }
+}
