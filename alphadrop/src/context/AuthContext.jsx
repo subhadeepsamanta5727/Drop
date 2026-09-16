@@ -8,40 +8,53 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    refreshUser()
+  }, [])
+
+  const refreshUser = async () => {
     const token = getStoredToken()
     if (!token) {
+      setUser(null)
       setLoading(false)
-      return
+      return null
     }
 
-    api
-      .get('/auth/me')
-      .then((response) => {
-        const profile = response.data?.data
-        if (profile) {
-          setUser({
-            id: profile.id,
-            name: profile.name,
-            email: profile.email,
-            role: profile.role,
-            hasActiveSubscription: profile.hasActiveSubscription,
-            hasOneTimeAccess: profile.hasOneTimeAccess,
-          })
+    try {
+      const response = await api.get('/auth/me')
+      const profile = response.data?.data
+      if (profile) {
+        const updatedUser = {
+          id: profile.id,
+          name: profile.name,
+          email: profile.email,
+          role: profile.role,
+          hasActiveSubscription: Boolean(profile.hasActiveSubscription),
+          hasOneTimeAccess: Boolean(profile.hasOneTimeAccess),
+          subscription: profile.subscription || {
+            plan: null,
+            status: profile.hasActiveSubscription ? 'active' : 'inactive',
+            expiresAt: null,
+          },
+          purchasedCategories: profile.purchasedCategories || [],
+          lifetimeCategories: profile.lifetimeCategories || [],
         }
-      })
-      .catch(() => {
-        setStoredToken('')
-        setUser(null)
-      })
-      .finally(() => setLoading(false))
-  }, [])
+        setUser(updatedUser)
+        return updatedUser
+      }
+    } catch {
+      setStoredToken('')
+      setUser(null)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const logout = () => {
     setStoredToken('')
     setUser(null)
   }
 
-  const value = useMemo(() => ({ user, setUser, loading, logout }), [user, loading])
+  const value = useMemo(() => ({ user, setUser, loading, logout, refreshUser }), [user, loading])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

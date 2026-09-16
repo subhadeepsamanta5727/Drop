@@ -62,7 +62,13 @@ exports.register = async (req, res, next) => {
           email: user.email,
           role: user.role,
           hasActiveSubscription: user.hasActiveSubscription,
-          hasOneTimeAccess: user.hasOneTimeAccess
+          hasOneTimeAccess: user.hasOneTimeAccess,
+          subscription: user.subscription || {
+            plan: null,
+            status: 'inactive',
+            expiresAt: null
+          },
+          purchasedCategories: user.purchasedCategories || []
         }
       }
     });
@@ -106,7 +112,13 @@ exports.login = async (req, res, next) => {
           email: user.email,
           role: user.role,
           hasActiveSubscription: user.hasActiveSubscription,
-          hasOneTimeAccess: user.hasOneTimeAccess
+          hasOneTimeAccess: user.hasOneTimeAccess,
+          subscription: user.subscription || {
+            plan: null,
+            status: user.hasActiveSubscription ? 'active' : 'inactive',
+            expiresAt: null
+          },
+          purchasedCategories: user.purchasedCategories || []
         }
       }
     });
@@ -125,6 +137,11 @@ exports.getProfile = async (req, res, next) => {
     }
 
     const summary = await buildProfileSummary(user._id);
+    const combinedCategories = Array.from(new Set([
+      ...(summary.lifetimeCategories || []),
+      ...(user.purchasedCategories || []).map((item) => String(item.category).toUpperCase())
+    ]));
+
     res.json({
       success: true,
       data: {
@@ -133,13 +150,19 @@ exports.getProfile = async (req, res, next) => {
         email: user.email,
         role: user.role,
         hasActiveSubscription: user.hasActiveSubscription,
-        hasOneTimeAccess: user.hasOneTimeAccess,
+        hasOneTimeAccess: user.hasOneTimeAccess || Boolean(combinedCategories.length),
+        subscription: user.subscription || {
+          plan: null,
+          status: user.hasActiveSubscription ? 'active' : 'inactive',
+          expiresAt: null
+        },
+        purchasedCategories: user.purchasedCategories || [],
         subscriptionQueue: {
           active: summary.activeCount,
           queued: summary.queuedCount,
           completed: summary.completedCount
         },
-        lifetimeCategories: summary.lifetimeCategories
+        lifetimeCategories: combinedCategories
       }
     });
   } catch (error) {

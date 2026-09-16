@@ -54,11 +54,14 @@ exports.handleRazorpayWebhook = async (req, res, next) => {
       return res.status(200).json({ success: true, data: { acknowledged: true, paymentId: existingPayment._id } });
     }
 
+    const orderType = notes?.type || notes?.planType || 'ONE_TIME';
+    const isOneTime = orderType === 'ONE_TIME_PACKAGE' || orderType === 'ONE_TIME';
+
     const payment = await Payment.create({
       userId,
-      paymentType: planType,
-      planCycle,
-      category,
+      paymentType: isOneTime ? 'ONE_TIME' : 'SUBSCRIPTION',
+      planCycle: !isOneTime ? planCycle : null,
+      category: isOneTime ? category : null,
       razorpayOrderId: order_id,
       razorpayPaymentId: id,
       amountInPaise: amount,
@@ -66,7 +69,7 @@ exports.handleRazorpayWebhook = async (req, res, next) => {
       status: 'SUCCESS'
     });
 
-    if (planType === 'ONE_TIME') {
+    if (isOneTime && category) {
       const oneTimeDoc = await OneTime.findOneAndUpdate(
         { userId, category },
         {
@@ -80,7 +83,19 @@ exports.handleRazorpayWebhook = async (req, res, next) => {
         { upsert: true, new: true, setDefaultsOnInsert: true }
       );
 
-      await User.findByIdAndUpdate(userId, { hasOneTimeAccess: true });
+      // Use $addToSet to add { category: notes.category, orderId: payment.order_id } into user.purchasedCategories
+      await User.findByIdAndUpdate(userId, {
+        $addToSet: {
+          purchasedCategories: {
+            category: notes.category || category,
+            orderId: order_id,
+            purchasedAt: new Date()
+          }
+        },
+        $set: {
+          hasOneTimeAccess: true
+        }
+      });
 
       return res.status(200).json({
         success: true,
@@ -108,7 +123,12 @@ exports.handleRazorpayWebhook = async (req, res, next) => {
         paymentId: payment._id
       });
 
-      await User.findByIdAndUpdate(userId, { hasActiveSubscription: true });
+      await User.findByIdAndUpdate(userId, {
+        hasActiveSubscription: true,
+        'subscription.status': 'active',
+        'subscription.plan': planCycle,
+        'subscription.expiresAt': expiresAt
+      });
 
       return res.status(200).json({ success: true, data: { acknowledged: true, subscription: sub } });
     }

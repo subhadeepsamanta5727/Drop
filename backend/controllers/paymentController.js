@@ -1,8 +1,11 @@
 const crypto = require('crypto');
 const Razorpay = require('../config/razorpay');
 const Pricing = require('../models/Pricing');
+const Package = require('../models/Package');
 const User = require('../models/User');
 const Payment = require('../models/Payment');
+const Subscription = require('../models/Subscription');
+const OneTime = require('../models/OneTime');
 const env = require('../config/env');
 
 const VALID_SUBSCRIPTION_CYCLES = {
@@ -115,6 +118,226 @@ exports.createOrder = async (req, res, next) => {
   }
 };
 
+exports.createCategoryOrder = async (req, res, next) => {
+  try {
+    const { packageId, category } = req.body || {};
+
+    let targetPackage = null;
+    let targetCategory = null;
+
+    if (packageId) {
+      targetPackage = await Package.findById(packageId).lean();
+      if (!targetPackage) {
+        targetPackage = await Pricing.findById(packageId).lean();
+      }
+    }
+
+    if (!targetPackage && category) {
+      const normCat = String(category).toUpperCase().trim();
+      targetPackage = await Package.findOne({ category: normCat, isActive: true }).lean();
+      if (!targetPackage) {
+        targetPackage = await Pricing.findOne({ planType: 'ONE_TIME', category: normCat, isActive: true }).lean();
+      }
+    }
+
+    if (!targetPackage) {
+      const error = new Error('Package or category not found');
+      error.statusCode = 404;
+      throw error;
+    }
+
+    targetCategory = String(targetPackage.category || category).toUpperCase().trim();
+
+    const priceInPaise = targetPackage.priceInPaise ||
+      (targetPackage.price !== undefined ? Math.round(Number(targetPackage.price) * 100) : 0);
+
+    if (!priceInPaise || priceInPaise <= 0) {
+      const error = new Error('Invalid package price');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const user = await User.findById(req.user.id).lean();
+    if (!user) {
+      const error = new Error('User not found');
+      error.statusCode = 404;
+      throw error;
+    }
+
+    const order = await Razorpay.orders.create({
+      amount: Number(priceInPaise),
+      currency: targetPackage.currency || 'INR',
+      receipt: `alphadrop_cat_${Date.now()}_${user._id.toString()}`,
+      notes: {
+        userId: user._id.toString(),
+        type: 'ONE_TIME_PACKAGE',
+        category: targetCategory
+      }
+    });
+
+    res.status(201).json({
+      success: true,
+      data: {
+        order,
+        amountInPaise: priceInPaise,
+        currency: targetPackage.currency || 'INR',
+        category: targetCategory,
+        package: {
+          id: targetPackage._id,
+          title: targetPackage.title || `${targetCategory} Package`,
+          category: targetCategory,
+          price: Number(priceInPaise) / 100
+        },
+        paymentMode: Razorpay.hasGatewayCredentials ? 'gateway' : 'mock'
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.verifyPayment = async (req, res, next) => {
+  try {
+    const {
+      razorpayOrderId,
+      razorpayPaymentId,
+      razorpaySignature,
+      type,
+      category,
+      planCycle,
+      amountInPaise
+    } = req.body || {};
+
+    const userId = req.user?.id;
+    if (!userId) {
+      const error = new Error('Unauthorized');
+      error.statusCode = 401;
+      throw error;
+    }
+
+    if (!razorpayOrderId || !razorpayPaymentId) {
+      const error = new Error('Missing payment credentials');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    if (Razorpay.hasGatewayCredentials && env.razorpayKeySecret && razorpaySignature) {
+      const expectedSignature = crypto
+        .createHmac('sha256', env.razorpayKeySecret)
+        .update(`${razorpayOrderId}|${razorpayPaymentId}`)
+        .digest('hex');
+
+      if (expectedSignature !== razorpaySignature) {
+        const error = new Error('Razorpay signature verification failed');
+        error.statusCode = 400;
+        throw error;
+      }
+    }
+
+    const isOneTime = type === 'ONE_TIME_PACKAGE' || type === 'ONE_TIME' || Boolean(category);
+    const targetCategory = category ? String(category).toUpperCase().trim() : null;
+
+    let payment = await Payment.findOne({ razorpayPaymentId });
+    if (!payment) {
+      payment = await Payment.create({
+        userId,
+        paymentType: isOneTime ? 'ONE_TIME' : 'SUBSCRIPTION',
+        planCycle: !isOneTime ? (planCycle || 'MONTHLY') : null,
+        category: targetCategory,
+        razorpayOrderId,
+        razorpayPaymentId,
+        razorpaySignature: razorpaySignature || null,
+        amountInPaise: amountInPaise || 0,
+        currency: 'INR',
+        status: 'SUCCESS'
+      });
+    }
+
+    if (isOneTime && targetCategory) {
+      await User.findByIdAndUpdate(userId, {
+        $addToSet: {
+          purchasedCategories: {
+            category: targetCategory,
+            orderId: razorpayOrderId,
+            purchasedAt: new Date()
+          }
+        },
+        $set: {
+          hasOneTimeAccess: true
+        }
+      });
+
+      await OneTime.findOneAndUpdate(
+        { userId, category: targetCategory },
+        {
+          $set: {
+            userId,
+            category: targetCategory,
+            isLifetimeActive: true,
+            paymentId: payment._id
+          }
+        },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      );
+
+      return res.json({
+        success: true,
+        message: `Category ${targetCategory} unlocked successfully`,
+        data: { category: targetCategory, orderId: razorpayOrderId, paymentId: payment._id }
+      });
+    }
+
+    if (!isOneTime) {
+      const cycle = planCycle || 'MONTHLY';
+      const durationMonths = cycle === 'MONTHLY' ? 1 : cycle === 'SIX_MONTH' ? 6 : 12;
+      const hasActiveSubscription = await Subscription.exists({
+        userId,
+        status: 'ACTIVE',
+        expiresAt: { $gt: new Date() }
+      });
+
+      if (!hasActiveSubscription) {
+        const startsAt = new Date();
+        const expiresAt = new Date(startsAt.getFullYear(), startsAt.getMonth() + durationMonths, startsAt.getDate(), startsAt.getHours(), startsAt.getMinutes(), startsAt.getSeconds(), startsAt.getMilliseconds());
+        const sub = await Subscription.create({
+          userId,
+          planCycle: cycle,
+          durationMonths,
+          status: 'ACTIVE',
+          startsAt,
+          expiresAt,
+          paymentId: payment._id
+        });
+
+        await User.findByIdAndUpdate(userId, {
+          hasActiveSubscription: true,
+          'subscription.status': 'active',
+          'subscription.plan': cycle,
+          'subscription.expiresAt': expiresAt
+        });
+
+        return res.json({ success: true, data: { subscription: sub, paymentId: payment._id } });
+      }
+
+      const sub = await Subscription.create({
+        userId,
+        planCycle: cycle,
+        durationMonths,
+        status: 'QUEUED',
+        startsAt: null,
+        expiresAt: null,
+        paymentId: payment._id
+      });
+
+      return res.json({ success: true, data: { subscription: sub, paymentId: payment._id } });
+    }
+
+    res.json({ success: true, data: { payment } });
+  } catch (error) {
+    next(error);
+  }
+};
+
 exports.webhook = async (req, res, next) => {
   try {
     const secret = env.razorpayWebhookSecret;
@@ -148,9 +371,10 @@ exports.webhook = async (req, res, next) => {
     }
 
     const { id, order_id, amount, currency, notes } = paymentEntity;
-    const planType = notes?.planType || 'ONE_TIME';
+    const orderType = notes?.type || notes?.planType || 'ONE_TIME';
+    const isOneTime = orderType === 'ONE_TIME_PACKAGE' || orderType === 'ONE_TIME';
     const planCycle = notes?.planCycle || null;
-    const category = notes?.category ? String(notes.category).toUpperCase() : null;
+    const category = notes?.category ? String(notes.category).toUpperCase().trim() : null;
     const userId = notes?.userId;
 
     if (!userId) {
@@ -159,20 +383,16 @@ exports.webhook = async (req, res, next) => {
       throw error;
     }
 
-    const existingPayment = await require('../models/Payment').findOne({ razorpayPaymentId: id });
+    const existingPayment = await Payment.findOne({ razorpayPaymentId: id });
     if (existingPayment) {
       return res.status(200).json({ success: true, data: { acknowledged: true, paymentId: existingPayment._id } });
     }
 
-    const Payment = require('../models/Payment');
-    const User = require('../models/User');
-    const Subscription = require('../models/Subscription');
-    const OneTime = require('../models/OneTime');
     const payment = await Payment.create({
       userId,
-      paymentType: planType,
-      planCycle,
-      category,
+      paymentType: isOneTime ? 'ONE_TIME' : 'SUBSCRIPTION',
+      planCycle: !isOneTime ? planCycle : null,
+      category: isOneTime ? category : null,
       razorpayOrderId: order_id,
       razorpayPaymentId: id,
       amountInPaise: amount,
@@ -180,7 +400,7 @@ exports.webhook = async (req, res, next) => {
       status: 'SUCCESS'
     });
 
-    if (planType === 'ONE_TIME') {
+    if (isOneTime && category) {
       const oneTimeDoc = await OneTime.findOneAndUpdate(
         { userId, category },
         {
@@ -194,7 +414,19 @@ exports.webhook = async (req, res, next) => {
         { upsert: true, new: true, setDefaultsOnInsert: true }
       );
 
-      await User.findByIdAndUpdate(userId, { hasOneTimeAccess: true });
+      // Use $addToSet to add { category: notes.category, orderId: payment.order_id } into user.purchasedCategories
+      await User.findByIdAndUpdate(userId, {
+        $addToSet: {
+          purchasedCategories: {
+            category: notes.category || category,
+            orderId: order_id,
+            purchasedAt: new Date()
+          }
+        },
+        $set: {
+          hasOneTimeAccess: true
+        }
+      });
 
       return res.status(200).json({
         success: true,
@@ -222,7 +454,12 @@ exports.webhook = async (req, res, next) => {
         paymentId: payment._id
       });
 
-      await User.findByIdAndUpdate(userId, { hasActiveSubscription: true });
+      await User.findByIdAndUpdate(userId, {
+        hasActiveSubscription: true,
+        'subscription.status': 'active',
+        'subscription.plan': planCycle,
+        'subscription.expiresAt': expiresAt
+      });
 
       return res.status(200).json({ success: true, data: { acknowledged: true, subscription: sub } });
     }

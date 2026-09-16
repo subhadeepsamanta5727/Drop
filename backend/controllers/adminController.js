@@ -1,6 +1,9 @@
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const DailyContent = require('../models/DailyContent');
+const Package = require('../models/Package');
+const Category = require('../models/Category');
 const Pricing = require('../models/Pricing');
 const User = require('../models/User');
 const Payment = require('../models/Payment');
@@ -39,6 +42,19 @@ const buildCloudinaryAsset = (file) => new Promise((resolve, reject) => {
 
   stream.end(file.buffer);
 });
+
+const buildLocalAsset = async (file) => {
+  const safeName = String(file.originalname || 'attachment')
+    .replace(/[^a-zA-Z0-9._-]/g, '_');
+  const fileName = `${Date.now()}-${crypto.randomUUID()}-${safeName}`;
+  await fs.promises.writeFile(path.join(storageDir, fileName), file.buffer);
+
+  return {
+    url: null,
+    publicId: null,
+    fileKey: fileName,
+  };
+};
 
 exports.getAdminOverview = async (req, res, next) => {
   try {
@@ -117,36 +133,88 @@ exports.uploadDailyContent = async (req, res, next) => {
       throw error;
     }
 
-    const { title, notes, targetTier } = req.body || {};
+    const { title, notes, link, targetTier, category, accessType, contentType } = req.body || {};
 
-    if (!title || !targetTier) {
-      const error = new Error('Title and targetTier are required');
+    if (!title) {
+      const error = new Error('Title is required');
       error.statusCode = 400;
       throw error;
     }
 
-    const normalizedTargetTier = String(targetTier).toUpperCase();
-    const allowedTargets = ['ONE_TIME', 'SUBSCRIPTION', 'ALL'];
-    if (!allowedTargets.includes(normalizedTargetTier)) {
-      const error = new Error('targetTier must be ONE_TIME, SUBSCRIPTION, or ALL');
+    if (!category) {
+      const error = new Error('Category is required. Please select a category for this upload.');
       error.statusCode = 400;
       throw error;
+    }
+
+    let normalizedContentType = contentType ? String(contentType).toUpperCase().trim() : null;
+    if (!normalizedContentType && accessType === 'one_time_category') {
+      normalizedContentType = 'ONE_TIME_CATEGORY';
+    } else if (!normalizedContentType && accessType === 'subscription_only') {
+      normalizedContentType = 'SUBSCRIPTION_DAILY';
+    }
+    if (normalizedContentType && !['SUBSCRIPTION_DAILY', 'ONE_TIME_CATEGORY'].includes(normalizedContentType)) {
+      const error = new Error('Invalid content type');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const normalizedCategory = String(category).toUpperCase().trim();
+    const categoryType = normalizedContentType === 'ONE_TIME_CATEGORY'
+      ? 'ONE_TIME_CATEGORY'
+      : 'SUBSCRIPTION_DAILY';
+    const categoryRecord = await Category.findOne({
+      category: normalizedCategory,
+      categoryType,
+      isActive: true
+    }).lean();
+
+    if (!categoryRecord) {
+      const error = new Error('Category must match an active category catalog entry');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    let normalizedAccessType = accessType ? String(accessType).toLowerCase().trim() : null;
+    let normalizedTargetTier = targetTier ? String(targetTier).toUpperCase().trim() : null;
+
+    if (normalizedContentType === 'SUBSCRIPTION_DAILY') {
+      normalizedAccessType = 'subscription_only';
+      normalizedTargetTier = 'SUBSCRIPTION';
+    } else if (normalizedContentType === 'ONE_TIME_CATEGORY') {
+      normalizedAccessType = 'one_time_category';
+      normalizedTargetTier = 'ONE_TIME';
+    }
+
+    if (normalizedAccessType) {
+      if (!['subscription_only', 'one_time_category', 'both'].includes(normalizedAccessType)) {
+        normalizedAccessType = 'both';
+      }
+      if (normalizedAccessType === 'subscription_only') normalizedTargetTier = 'SUBSCRIPTION';
+      else if (normalizedAccessType === 'one_time_category') normalizedTargetTier = 'ONE_TIME';
+      else if (normalizedAccessType === 'both') normalizedTargetTier = 'ALL';
+    } else if (normalizedTargetTier) {
+      if (!['ONE_TIME', 'SUBSCRIPTION', 'ALL'].includes(normalizedTargetTier)) {
+        normalizedTargetTier = 'ALL';
+      }
+      if (normalizedTargetTier === 'SUBSCRIPTION') normalizedAccessType = 'subscription_only';
+      else if (normalizedTargetTier === 'ONE_TIME') normalizedAccessType = 'one_time_category';
+      else if (normalizedTargetTier === 'ALL') normalizedAccessType = 'both';
+    } else {
+      normalizedAccessType = 'both';
+      normalizedTargetTier = 'ALL';
     }
 
     const uploadedFileAssets = await Promise.all(
       files.map(async (file) => {
         const cloudAsset = await buildCloudinaryAsset(file);
-        if (!cloudAsset) {
-          const error = new Error('Cloudinary is not configured for file uploads');
-          error.statusCode = 503;
-          throw error;
-        }
+        const asset = cloudAsset || await buildLocalAsset(file);
 
         return {
           label: file.originalname || 'Attachment',
-          fileKey: cloudAsset.publicId || cloudAsset.url || file.originalname,
-          cloudinaryPublicId: cloudAsset.publicId || null,
-          cloudinaryUrl: cloudAsset.url || null,
+          fileKey: asset.fileKey || asset.publicId || asset.url || file.originalname,
+          cloudinaryPublicId: asset.publicId || null,
+          cloudinaryUrl: asset.url || null,
           originalFileName: file.originalname,
           fileMimeType: file.mimetype || 'application/octet-stream',
           fileSizeBytes: file.size || 0,
@@ -157,6 +225,10 @@ exports.uploadDailyContent = async (req, res, next) => {
     const uploadedContent = await DailyContent.create({
       title: String(title).trim(),
       notes: notes ? String(notes).trim() : '',
+      link: link ? String(link).trim() : '',
+      category: normalizedCategory,
+      contentType: normalizedContentType,
+      accessType: normalizedAccessType,
       targetTier: normalizedTargetTier,
       files: uploadedFileAssets,
       uploadedBy: req.user.id,
@@ -381,18 +453,52 @@ exports.downloadDailyContentFile = async (req, res, next) => {
 
 exports.createDailyContentRecord = async (req, res, next) => {
   try {
-    const { title, notes, targetTier } = req.body || {};
+    const { title, notes, link, targetTier, category, accessType } = req.body || {};
 
-    if (!title || !targetTier) {
-      const error = new Error('Title and targetTier are required');
+    if (!title) {
+      const error = new Error('Title is required');
       error.statusCode = 400;
       throw error;
+    }
+
+    const normalizedCategory = String(category || 'GENERAL').toUpperCase().trim();
+    const categoryRecord = await Category.findOne({
+      category: normalizedCategory,
+      categoryType: accessType === 'one_time_category' || targetTier === 'ONE_TIME'
+        ? 'ONE_TIME_CATEGORY'
+        : 'SUBSCRIPTION_DAILY',
+      isActive: true
+    }).lean();
+
+    if (!categoryRecord) {
+      const error = new Error('Category must match an active category catalog entry');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    let normalizedAccessType = accessType ? String(accessType).toLowerCase().trim() : null;
+    let normalizedTargetTier = targetTier ? String(targetTier).toUpperCase().trim() : null;
+
+    if (normalizedAccessType) {
+      if (normalizedAccessType === 'subscription_only') normalizedTargetTier = 'SUBSCRIPTION';
+      else if (normalizedAccessType === 'one_time_category') normalizedTargetTier = 'ONE_TIME';
+      else normalizedTargetTier = 'ALL';
+    } else if (normalizedTargetTier) {
+      if (normalizedTargetTier === 'SUBSCRIPTION') normalizedAccessType = 'subscription_only';
+      else if (normalizedTargetTier === 'ONE_TIME') normalizedAccessType = 'one_time_category';
+      else normalizedAccessType = 'both';
+    } else {
+      normalizedAccessType = 'both';
+      normalizedTargetTier = 'ALL';
     }
 
     const document = await DailyContent.create({
       title: String(title).trim(),
       notes: notes ? String(notes).trim() : '',
-      targetTier: String(targetTier).toUpperCase(),
+      link: link ? String(link).trim() : '',
+      category: normalizedCategory,
+      accessType: normalizedAccessType,
+      targetTier: normalizedTargetTier,
       files: [
         {
           label: 'Primary File',
@@ -421,7 +527,7 @@ exports.createDailyContentRecord = async (req, res, next) => {
 exports.updateDailyContentRecord = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { title, notes, targetTier } = req.body || {};
+    const { title, notes, link, targetTier, category, accessType } = req.body || {};
 
     const existing = await DailyContent.findById(id);
     if (!existing) {
@@ -430,15 +536,43 @@ exports.updateDailyContentRecord = async (req, res, next) => {
       throw error;
     }
 
+    const updateFields = {};
+    if (title) updateFields.title = String(title).trim();
+    if (notes !== undefined) updateFields.notes = String(notes).trim();
+    if (link !== undefined) updateFields.link = String(link).trim();
+    if (category) {
+      const normalizedCategory = String(category).toUpperCase().trim();
+      const categoryRecord = await Category.findOne({
+        category: normalizedCategory,
+        categoryType: accessType === 'one_time_category' || targetTier === 'ONE_TIME'
+          ? 'ONE_TIME_CATEGORY'
+          : 'SUBSCRIPTION_DAILY',
+        isActive: true
+      }).lean();
+
+      if (!categoryRecord) {
+        const error = new Error('Category must match an active category catalog entry');
+        error.statusCode = 400;
+        throw error;
+      }
+
+      updateFields.category = normalizedCategory;
+    }
+    if (accessType) {
+      updateFields.accessType = String(accessType).toLowerCase().trim();
+      if (updateFields.accessType === 'subscription_only') updateFields.targetTier = 'SUBSCRIPTION';
+      else if (updateFields.accessType === 'one_time_category') updateFields.targetTier = 'ONE_TIME';
+      else updateFields.targetTier = 'ALL';
+    } else if (targetTier) {
+      updateFields.targetTier = String(targetTier).toUpperCase().trim();
+      if (updateFields.targetTier === 'SUBSCRIPTION') updateFields.accessType = 'subscription_only';
+      else if (updateFields.targetTier === 'ONE_TIME') updateFields.accessType = 'one_time_category';
+      else updateFields.accessType = 'both';
+    }
+
     const document = await DailyContent.findByIdAndUpdate(
       id,
-      {
-        $set: {
-          title: title ? String(title).trim() : existing.title,
-          notes: notes !== undefined ? String(notes).trim() : existing.notes,
-          targetTier: targetTier ? String(targetTier).toUpperCase() : existing.targetTier,
-        },
-      },
+      { $set: updateFields },
       { new: true }
     );
 

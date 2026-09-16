@@ -74,7 +74,7 @@ export default function AuthPage({ mode: initialMode = 'login' }) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-[linear-gradient(135deg,#edf6ff_0%,#dbeafe_48%,#f8fbff_100%)] px-4 py-10">
       <div className="w-full max-w-[1100px] overflow-hidden rounded-[28px] border border-blue-200 bg-white shadow-[0_30px_80px_rgba(15,61,156,0.16)]">
-        <div className="grid min-h-[760px] lg:grid-cols-[1.08fr_0.92fr]">
+        <div className="grid min-h-0 lg:min-h-[760px] lg:grid-cols-[1.08fr_0.92fr]">
           <aside className="relative hidden overflow-hidden bg-gradient-to-br from-[#06152f] via-[#0b2859] to-[#0f6ce5] p-8 lg:flex lg:flex-col lg:justify-between">
             <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,transparent_0%,transparent_58%,rgba(125,211,252,0.12)_58%,rgba(125,211,252,0.12)_59%,transparent_59%,transparent_100%)]" />
 

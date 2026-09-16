@@ -1,12 +1,10 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { Check } from 'lucide-react'
 import { toast } from 'sonner'
-import { useNavigate } from 'react-router-dom'
 import { Header } from '../components/ui/Header.jsx'
 import { Sidebar } from '../components/ui/Sidebar.jsx'
 import api from '../services/api.js'
-
-const formatPrice = (value) => `₹${Number(value || 0) / 100}`
+import { useAuth } from '../context/AuthContext.jsx'
 
 const getDaysLeft = (expiresAt) => {
   if (!expiresAt) return null
@@ -28,133 +26,131 @@ const loadRazorpayScript = () => new Promise((resolve) => {
 })
 
 export default function UserPackagesPage() {
-  const navigate = useNavigate()
+  const { user, refreshUser } = useAuth()
   const [plans, setPlans] = useState([])
-  const [ownedPlans, setOwnedPlans] = useState([])
+  const [packages, setPackages] = useState([])
   const [loading, setLoading] = useState(true)
   const [buyingId, setBuyingId] = useState(null)
-  const [billingMode, setBillingMode] = useState('MONTHLY')
+  const [billingMode, setBillingMode] = useState('ONE_TIME')
   const [accessStatus, setAccessStatus] = useState({
     subscriptionActive: false,
     subscriptionExpiresAt: null,
     lifetimeActive: false,
+    purchasedCategories: [],
   })
 
-  useEffect(() => {
-    const fetchPlans = async () => {
-      try {
-        const [plansResponse, userPaymentsResponse, subscriptionResponse, oneTimeResponse] = await Promise.all([
-          api.get('/payment/plans'),
-          api.get('/payment/my-payments'),
-          api.get('/dashboard/subscription'),
-          api.get('/dashboard/onetime'),
-        ])
+  const fetchCatalogData = async () => {
+    try {
+      const [plansResponse, packagesResponse, subscriptionResponse, profileResponse] = await Promise.all([
+        api.get('/payment/plans'),
+        api.get('/packages'),
+        api.get('/dashboard/subscription'),
+        api.get('/auth/me'),
+      ])
 
-        const payments = userPaymentsResponse.data?.data || []
-        const activeSubscription = subscriptionResponse.data?.data || {}
-        const activeWindow = (activeSubscription.subscriptionWindows || [])
-          .filter((window) => window.expiresAt && new Date(window.expiresAt).getTime() > Date.now())
-          .sort((first, second) => new Date(first.expiresAt) - new Date(second.expiresAt))[0]
+      const activeSubscription = subscriptionResponse.data?.data || {}
+      const profile = profileResponse.data?.data || {}
+      const activeWindow = (activeSubscription.subscriptionWindows || [])
+        .filter((window) => window.expiresAt && new Date(window.expiresAt).getTime() > Date.now())
+        .sort((first, second) => new Date(first.expiresAt) - new Date(second.expiresAt))[0]
 
-        setAccessStatus({
-          subscriptionActive: Boolean(activeSubscription.hasActiveSubscription),
-          subscriptionExpiresAt: activeSubscription.activeSubscription?.expiresAt || activeWindow?.expiresAt || null,
-          lifetimeActive: Boolean(oneTimeResponse.data?.data?.hasOneTimeAccess),
-        })
+      const purchasedCats = Array.from(new Set([
+        ...(profile.purchasedCategories || []).map((item) => String(item.category).toUpperCase()),
+        ...(profile.lifetimeCategories || []).map((c) => String(c).toUpperCase())
+      ]))
 
-        const mappedPlans = payments.map((payment) => ({
-          id: payment._id,
-          title: payment.planCycle || payment.category || 'General',
-          type: payment.paymentType === 'SUBSCRIPTION' ? 'Subscription' : 'One-time',
-          status: payment.status,
-          amount: `₹${Number(payment.amountInPaise || 0) / 100}`,
-          date: new Date(payment.createdAt).toLocaleDateString('en-IN', {
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric',
-          }),
-        }))
+      setAccessStatus({
+        subscriptionActive: Boolean(profile.hasActiveSubscription || activeSubscription.hasActiveSubscription),
+        subscriptionExpiresAt: profile.subscription?.expiresAt || activeSubscription.activeSubscription?.expiresAt || activeWindow?.expiresAt || null,
+        lifetimeActive: Boolean(profile.hasOneTimeAccess || purchasedCats.length > 0),
+        purchasedCategories: purchasedCats,
+      })
 
-        if (activeSubscription.hasActiveSubscription && activeSubscription.activeSubscription) {
-          mappedPlans.unshift({
-            id: `active-${activeSubscription.activeSubscription._id}`,
-            title: activeSubscription.activeSubscription.planCycle || 'Active plan',
-            type: 'Active subscription',
-            status: 'ACTIVE',
-            amount: `₹${Number(activeSubscription.activeSubscription.amountInPaise || 0) / 100}`,
-            date: new Date(activeSubscription.activeSubscription.startsAt).toLocaleDateString('en-IN', {
-              day: '2-digit',
-              month: 'short',
-              year: 'numeric',
-            }),
-          })
-        }
-
-        setPlans(plansResponse.data?.data || [])
-        setOwnedPlans(mappedPlans)
-      } catch (error) {
-        toast.error(error.response?.data?.message || 'Unable to load plans')
-      } finally {
-        setLoading(false)
-      }
+      setPlans(plansResponse.data?.data || [])
+      setPackages(packagesResponse.data?.data || [])
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Unable to load catalog')
+    } finally {
+      setLoading(false)
     }
+  }
 
-    fetchPlans()
+  useEffect(() => {
+    fetchCatalogData()
   }, [])
 
   const subscriptionPlans = Array.isArray(plans)
     ? plans.filter((plan) => plan.planType === 'SUBSCRIPTION' && plan.isActive)
     : []
 
-  const oneTimePlans = Array.isArray(plans)
-    ? plans.filter((plan) => plan.planType === 'ONE_TIME' && plan.isActive)
-    : []
-
   const subscriptionDaysLeft = getDaysLeft(accessStatus.subscriptionExpiresAt)
 
-  const pricingCards = billingMode === 'MONTHLY'
-    ? subscriptionPlans.slice(0, 4).map((plan, index) => ({
-        name: plan.planCycle ? plan.planCycle.replace('_', ' ') : ['Starter', 'Growth', 'Pro', 'Elite'][index] || 'Plan',
-        price: Number(plan.priceInPaise || 0) / 100,
-        priceLabel: plan.planCycle === 'MONTHLY' ? '/mo' : '/cycle',
-        features: [
-          'Priority access to premium updates',
-          'Full member dashboard support',
-          'Flexible content entitlement windows',
-        ],
-        featured: index === 2,
-        button: 'Purchase',
-        _id: plan._id,
-      }))
-    : oneTimePlans.slice(0, 4).map((plan, index) => ({
-        name: plan.category ? plan.category : ['Crypto', 'Stocks', 'Forex', 'General'][index] || 'Plan',
-        price: Number(plan.priceInPaise || 0) / 100,
-        priceLabel: '/one-time',
-        features: [
-          'Lifetime access for selected category',
-          'Full vault unlock with instant access',
-          'Permanent premium content rights',
-        ],
-        featured: index === 2,
-        button: 'Purchase',
-        _id: plan._id,
-      }))
+  // Subscription Pricing Cards
+  const subscriptionCards = subscriptionPlans.slice(0, 4).map((plan, index) => ({
+    name: plan.planCycle ? plan.planCycle.replace('_', ' ') : ['Starter', 'Growth', 'Pro', 'Elite'][index] || 'Plan',
+    price: Number(plan.priceInPaise || 0) / 100,
+    priceLabel: plan.planCycle === 'MONTHLY' ? '/mo' : '/cycle',
+    features: [
+      'Universal access to ALL categories',
+      'Instant download on all daily content drops',
+      'Continuous uninterrupted access',
+    ],
+    featured: index === 1,
+    buttonText: accessStatus.subscriptionActive ? 'Extend Subscription' : 'Subscribe Now',
+    _id: plan._id,
+    planType: 'SUBSCRIPTION',
+    planCycle: plan.planCycle,
+  }))
 
-  const handlePurchase = async (plan) => {
-    const selectedPlan = plans.find((item) => item._id === plan._id)
+  // One-Time Category Package Cards
+  const categoryCards = packages.map((pkg, index) => {
+    const isOwned = accessStatus.purchasedCategories.includes(pkg.category?.toUpperCase())
+    const priceVal = pkg.price || (pkg.priceInPaise ? Number(pkg.priceInPaise) / 100 : 499)
 
-    if (!selectedPlan) {
-      toast.success('Plan selected')
+    return {
+      name: pkg.title || `${pkg.category} Pass`,
+      category: pkg.category,
+      price: priceVal,
+      priceLabel: '/lifetime',
+      description: pkg.description || `Lifetime permanent access to the ${pkg.category} library.`,
+      features: [
+        `Lifetime access to all ${pkg.category} files`,
+        'Never expires — pay once, keep forever',
+        'Includes all past and future daily drops',
+      ],
+      featured: index === 0,
+      isOwned: isOwned || accessStatus.subscriptionActive,
+      isSpecificallyOwned: isOwned,
+      buttonText: isOwned
+        ? 'Owned (Lifetime Access)'
+        : accessStatus.subscriptionActive
+        ? 'Unlocked via Subscription'
+        : 'Buy Category Access',
+      _id: pkg._id,
+      planType: 'ONE_TIME_PACKAGE',
+    }
+  })
+
+  const handlePurchase = async (card) => {
+    if (card.isSpecificallyOwned) {
+      toast.info(`You already own the ${card.category} category package!`)
       return
     }
 
-    setBuyingId(selectedPlan._id)
+    setBuyingId(card._id)
     try {
-      const payload = selectedPlan.planType === 'SUBSCRIPTION'
-        ? { planType: 'SUBSCRIPTION', planCycle: selectedPlan.planCycle }
-        : { planType: 'ONE_TIME', category: selectedPlan.category }
+      let endpoint = '/payment/create-order'
+      let payload = {}
 
-      const response = await api.post('/payment/create-order', payload)
+      if (card.planType === 'ONE_TIME_PACKAGE') {
+        endpoint = '/payment/create-category-order'
+        payload = { packageId: card._id, category: card.category }
+      } else {
+        endpoint = '/payment/create-order'
+        payload = { planType: 'SUBSCRIPTION', planCycle: card.planCycle }
+      }
+
+      const response = await api.post(endpoint, payload)
       const orderData = response.data?.data
 
       if (!orderData?.order?.id) {
@@ -173,23 +169,44 @@ export default function UserPackagesPage() {
         amount: Number(orderData.amountInPaise || 0),
         currency: orderData.currency || 'INR',
         name: 'AlphaDrop',
-        description: `${selectedPlan.planType === 'SUBSCRIPTION' ? 'Subscription' : 'One-time'} plan purchase`,
+        description: card.planType === 'ONE_TIME_PACKAGE'
+          ? `Unlock ${card.category} Lifetime Package`
+          : 'AlphaDrop Subscription',
         order_id: orderData.order.id,
         handler: async (paymentResponse) => {
-          toast.success('Payment successful. Redirecting to payment history.')
-          navigate('/dashboard/payments', { replace: true })
-          console.log('Razorpay success', paymentResponse)
+          try {
+            await api.post('/payment/verify', {
+              razorpayOrderId: paymentResponse.razorpay_order_id,
+              razorpayPaymentId: paymentResponse.razorpay_payment_id,
+              razorpaySignature: paymentResponse.razorpay_signature,
+              type: card.planType,
+              category: card.category,
+              planCycle: card.planCycle,
+              amountInPaise: orderData.amountInPaise,
+            })
+
+            toast.success(
+              card.planType === 'ONE_TIME_PACKAGE'
+                ? `You now have permanent access to ${card.category}!`
+                : 'Subscription activated successfully!'
+            )
+
+            if (refreshUser) await refreshUser()
+            await fetchCatalogData()
+          } catch (verifyErr) {
+            toast.error(verifyErr.response?.data?.message || 'Payment verification failed')
+          }
         },
         prefill: {
-          name: 'AlphaDrop User',
-          email: 'user@alphadrop.com',
+          name: user?.name || 'AlphaDrop User',
+          email: user?.email || 'user@alphadrop.com',
         },
         theme: {
           color: '#0f6ce5',
         },
         modal: {
           ondismiss: () => {
-            toast.info('Payment cancelled. You can try again anytime.')
+            toast.info('Payment cancelled.')
           },
         },
       })
@@ -202,133 +219,174 @@ export default function UserPackagesPage() {
     }
   }
 
+  const activeCards = billingMode === 'ONE_TIME' ? categoryCards : subscriptionCards
+
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#ffffff_0%,#edf6ff_100%)] p-4 text-slate-900 lg:p-6">
       <div className="mx-auto flex max-w-[1500px] flex-col gap-6 xl:flex-row">
         <Sidebar mode="USER" />
 
         <main className="min-w-0 flex-1">
-          <Header title="Choose Packages" badge="Pricing" subtitle="Select monthly access or lifetime category passes." />
+          <Header
+            title="Monetization & Plans"
+            badge="Hybrid Catalog"
+            subtitle="Choose between one-time category packages or full all-access subscriptions."
+          />
 
-          <div className="mx-auto max-w-[980px] px-2 py-6">
-            <div className="mb-8 grid gap-4 md:grid-cols-2">
-              <article className={`rounded-2xl border bg-white p-5 shadow-[0_12px_28px_rgba(15,61,156,0.06)] transition ${billingMode === 'MONTHLY' ? 'border-[#0f6ce5] ring-2 ring-blue-100' : 'border-blue-100 hover:border-blue-300'}`}>
-                <div className="mb-4 flex items-start justify-between gap-3">
+          <div className="mx-auto max-w-[1100px] px-2 py-4">
+            <div className="mb-6 grid gap-3 sm:grid-cols-2">
+              <article className="rounded-xl border border-blue-100/80 bg-blue-50/70 px-4 py-3 shadow-sm backdrop-blur-sm">
+                <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#0f6ce5]">Account access</p>
-                    <h2 className="mt-1 text-2xl font-bold text-slate-900">Subscription</h2>
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Subscription</p>
+                    <p className="mt-1 text-sm font-bold text-slate-900">
+                      {accessStatus.subscriptionActive ? 'Active' : 'Inactive'}
+                    </p>
                   </div>
-                  <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${accessStatus.subscriptionActive ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
-                    {accessStatus.subscriptionActive ? 'Active' : 'Inactive'}
+                  <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${accessStatus.subscriptionActive ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                    {accessStatus.subscriptionActive
+                      ? subscriptionDaysLeft === null ? 'End date unavailable' : `${subscriptionDaysLeft} days remaining`
+                      : 'Purchase required'}
                   </span>
                 </div>
-                <p className="mt-6 text-lg font-semibold text-[#0f6ce5]">
-                  {accessStatus.subscriptionActive
-                    ? `Days left: ${subscriptionDaysLeft === null ? 'N/A' : subscriptionDaysLeft}`
-                    : 'Days left: 0'}
-                </p>
-                <button type="button" onClick={() => setBillingMode('MONTHLY')} disabled={accessStatus.subscriptionActive} className="primary-button mt-6 w-full py-2.5 text-xs uppercase tracking-[0.12em] disabled:cursor-default disabled:opacity-80">
-                  {accessStatus.subscriptionActive ? 'Active' : 'View subscription plans'}
-                </button>
               </article>
 
-              <article className={`rounded-2xl border bg-white p-5 shadow-[0_12px_28px_rgba(15,61,156,0.06)] transition ${billingMode === 'ONE_TIME' ? 'border-[#0f6ce5] ring-2 ring-blue-100' : 'border-blue-100 hover:border-blue-300'}`}>
-                <div className="mb-4 flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#0f6ce5]">Account access</p>
-                    <h2 className="mt-1 text-2xl font-bold text-slate-900">One-time</h2>
-                  </div>
-                  <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${accessStatus.lifetimeActive ? 'bg-blue-100 text-blue-700' : 'bg-orange-50 text-orange-700'}`}>
-                    {accessStatus.lifetimeActive ? 'Unlocked' : 'Locked'}
-                  </span>
-                </div>
-                <p className="mt-6 text-lg font-semibold text-[#0f6ce5]">
-                  {accessStatus.lifetimeActive ? 'Lifetime access enabled' : 'No lifetime access'}
+              <article className="rounded-xl border border-blue-100/80 bg-blue-50/70 px-4 py-3 shadow-sm backdrop-blur-sm">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">One-Time Access</p>
+                <p className="mt-1 text-sm font-bold text-slate-900">
+                  {accessStatus.purchasedCategories.length} active categor{accessStatus.purchasedCategories.length === 1 ? 'y' : 'ies'}
                 </p>
-                <button type="button" onClick={() => setBillingMode('ONE_TIME')} disabled={accessStatus.lifetimeActive} className={`${accessStatus.lifetimeActive ? 'primary-button' : 'secondary-button'} mt-6 w-full py-2.5 text-xs uppercase tracking-[0.12em] disabled:cursor-default disabled:opacity-80`}>
-                  {accessStatus.lifetimeActive ? 'Unlocked' : 'View one-time plans'}
-                </button>
-              </article>
-            </div>
-
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <h2 className="text-2xl font-bold text-slate-900">Purchase a plan</h2>
-              <span className="text-xs font-medium uppercase tracking-[0.14em] text-slate-400">Choose your access</span>
-            </div>
-
-            <div className="mx-auto mb-10 flex w-full max-w-[320px] items-center rounded-xl border border-blue-100 bg-blue-50 p-1 shadow-inner shadow-blue-100/60">
-              {[
-                { value: 'MONTHLY', label: 'Subscription' },
-                { value: 'ONE_TIME', label: 'One-time' },
-              ].map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => setBillingMode(option.value)}
-                  className={`flex-1 rounded-lg px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.14em] transition-all duration-200 ${
-                    billingMode === option.value
-                      ? 'bg-gradient-to-r from-[#0f6ce5] to-[#0c2d64] text-white shadow-sm hover:brightness-105'
-                      : 'text-slate-500 hover:bg-white hover:text-blue-800'
-                  }`}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="grid gap-4 lg:grid-cols-4">
-              {pricingCards.length === 0 ? (
-                <div className="lg:col-span-4 rounded-3xl border border-dashed border-blue-200 bg-white/70 p-8 text-center text-sm text-slate-600">
-                  No {billingMode === 'MONTHLY' ? 'subscription' : 'one-time'} plans are available right now. Add plans from the admin panel to enable pricing here.
-                </div>
-              ) : (
-                pricingCards.map((card) => (
-                <div
-                  key={card.name}
-                    className={`relative rounded-[26px] border bg-white p-5 shadow-[0_18px_40px_rgba(15,61,156,0.06)] transition-all duration-200 hover:-translate-y-1 hover:shadow-[0_25px_50px_rgba(15,108,229,0.16)] ${
-                    card.featured
-                      ? 'border-[#0f6ce5]/70 ring-2 ring-blue-200/80 shadow-[0_25px_50px_rgba(15,108,229,0.18)]'
-                      : 'border-blue-100 hover:border-blue-300'
-                  }`}
-                >
-                  {card.featured && (
-                    <div className="absolute -top-4 left-1/2 -translate-x-1/2 rounded-full border border-amber-300 bg-amber-100 px-3 py-1 text-[9px] font-bold uppercase tracking-[0.2em] text-amber-700">
-                      Recommended
-                    </div>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {accessStatus.purchasedCategories.length ? accessStatus.purchasedCategories.map((category) => (
+                    <span key={category} className="rounded-full bg-blue-100 px-2.5 py-1 text-[10px] font-bold uppercase text-blue-700">
+                      {category}
+                    </span>
+                  )) : (
+                    <span className="text-xs text-slate-500">None yet</span>
                   )}
-
-                  <div className="mb-6 text-center text-xl font-semibold text-slate-700">{card.name}</div>
-                  <div className="mb-6 flex items-end justify-center gap-1 text-slate-900">
-                    <span className="text-4xl font-black tracking-[-0.08em]">₹{card.price}</span>
-                    <span className="pb-1 text-xs font-medium text-slate-500">{card.priceLabel}</span>
-                  </div>
-
-                  <ul className="space-y-3">
-                    {card.features.map((feature) => (
-                      <li key={feature} className="flex items-center gap-3 text-sm text-slate-700">
-                        <span className="flex h-4 w-4 items-center justify-center rounded-full bg-blue-100 text-[#0f6ce5]">
-                          <Check size={12} />
-                        </span>
-                        <span>{feature}</span>
-                      </li>
-                    ))}
-                  </ul>
-
-                  <button
-                    type="button"
-                    onClick={() => handlePurchase({ _id: card._id || card.name })}
-                    className={`mt-7 w-full rounded-xl border px-4 py-3 text-xs font-bold uppercase tracking-[0.12em] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg ${
-                      card.featured
-                        ? 'border-[#0f6ce5] bg-gradient-to-r from-[#0f6ce5] to-[#0c2d64] text-white shadow-lg shadow-blue-500/20 hover:brightness-110'
-                        : 'border-blue-200 bg-white text-slate-800 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-800'
-                    }`}
-                  >
-                    {buyingId === (card._id || card.name) ? 'Processing...' : card.button}
-                  </button>
                 </div>
-                ))
-              )}
+              </article>
             </div>
+
+            <div className="mb-6 flex flex-col gap-4 border-b border-blue-100 pb-5 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <h2 className="text-2xl font-bold tracking-tight text-slate-950">
+                  {billingMode === 'ONE_TIME' ? 'One-Time Category Packages' : 'Subscription Plans'}
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  {billingMode === 'ONE_TIME'
+                    ? `${accessStatus.purchasedCategories.length} categories unlocked · Lifetime access`
+                    : accessStatus.subscriptionActive
+                    ? `${subscriptionDaysLeft === null ? 'Active subscription' : `${subscriptionDaysLeft} days remaining`} · Full catalog access`
+                    : 'Full catalog access during your billing period'}
+                </p>
+              </div>
+
+              <div className="flex items-center rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
+                <button
+                  type="button"
+                  onClick={() => setBillingMode('ONE_TIME')}
+                  className={`rounded-lg px-3.5 py-2 text-xs font-semibold transition ${
+                    billingMode === 'ONE_TIME'
+                      ? 'bg-slate-900 text-white shadow-sm'
+                      : 'text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  One-Time Packages
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBillingMode('MONTHLY')}
+                  className={`rounded-lg px-3.5 py-2 text-xs font-semibold transition ${
+                    billingMode === 'MONTHLY'
+                      ? 'bg-slate-900 text-white shadow-sm'
+                      : 'text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  Subscriptions
+                </button>
+              </div>
+            </div>
+
+            {loading ? (
+              <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center text-sm text-slate-500">Loading catalog...</div>
+            ) : activeCards.length === 0 ? (
+              <div className="rounded-3xl border border-dashed border-blue-200 bg-white/70 p-12 text-center text-sm text-slate-600">
+                No {billingMode === 'ONE_TIME' ? 'one-time category packages' : 'subscription plans'} available right now.
+              </div>
+            ) : (
+              <div className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-4 [scrollbar-width:thin]">
+                {activeCards.map((card) => {
+                  const isAlreadyOwned = card.isSpecificallyOwned
+                  return (
+                    <div
+                      key={card._id || card.name}
+                      className={"relative flex min-w-[280px] snap-start flex-col justify-between rounded-2xl border bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md sm:min-w-[320px] " + (
+                        isAlreadyOwned
+                          ? 'border-emerald-300'
+                          : card.featured
+                          ? 'border-blue-300'
+                          : 'border-slate-200 hover:border-blue-300'
+                      )}
+                    >
+                      {isAlreadyOwned ? (
+                        <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 rounded-full border border-emerald-300 bg-emerald-100 px-3 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-800">
+                          Active Entitlement
+                        </div>
+                      ) : card.featured ? (
+                        <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 rounded-full border border-blue-200 bg-blue-100 px-3 py-0.5 text-[10px] font-bold uppercase tracking-wider text-blue-800">
+                          Recommended
+                        </div>
+                      ) : null}
+
+                      <div>
+                        {card.category && (
+                          <span className="inline-block rounded-md bg-blue-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-blue-700">
+                            {card.category}
+                          </span>
+                        )}
+
+                        <h4 className="mt-2 text-xl font-bold text-slate-900">{card.name}</h4>
+                        {card.description && (
+                          <p className="mt-1 text-xs text-slate-500 line-clamp-2">{card.description}</p>
+                        )}
+
+                        <div className="my-5 flex items-baseline gap-1">
+                          <span className="text-3xl font-bold text-slate-900">₹{card.price}</span>
+                          <span className="text-xs font-semibold text-slate-400">{card.priceLabel}</span>
+                        </div>
+
+                        <ul className="space-y-2.5 text-xs text-slate-600">
+                          {card.features.map((feature, fIdx) => (
+                            <li key={fIdx} className="flex items-start gap-2">
+                              <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-blue-100 text-[#0f6ce5]">
+                                <Check size={11} />
+                              </span>
+                              <span>{feature}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      <div className="mt-6 pt-4 border-t border-blue-50">
+                        <button
+                          type="button"
+                          onClick={() => handlePurchase(card)}
+                          disabled={isAlreadyOwned || buyingId === card._id}
+                          className={`w-full rounded-xl py-3 text-xs font-bold uppercase tracking-wider transition ${
+                            isAlreadyOwned
+                              ? 'border border-emerald-200 bg-emerald-50 text-emerald-700 cursor-default'
+                              : 'primary-button'
+                          }`}
+                        >
+                          {buyingId === card._id ? 'Processing...' : card.buttonText}
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
         </main>
       </div>

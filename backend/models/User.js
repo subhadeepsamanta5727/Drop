@@ -34,7 +34,39 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
       index: true
-    }
+    },
+    subscription: {
+      plan: {
+        type: String,
+        default: null
+      },
+      status: {
+        type: String,
+        default: 'inactive'
+      },
+      expiresAt: {
+        type: Date,
+        default: null
+      }
+    },
+    purchasedCategories: [
+      {
+        category: {
+          type: String,
+          required: true,
+          trim: true,
+          uppercase: true
+        },
+        orderId: {
+          type: String,
+          default: null
+        },
+        purchasedAt: {
+          type: Date,
+          default: Date.now
+        }
+      }
+    ]
   },
   { timestamps: true }
 );

@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "nodemon server.js",
     "start": "node server.js",
+    "seed:demo-user": "node scripts/seedDemoUser.js",
     "check": "node --check server.js"
   },
   "dependencies": {

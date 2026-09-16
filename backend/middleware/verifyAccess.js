@@ -30,7 +30,12 @@ const advanceQueue = async (userId) => {
 
   if (validActiveSubs.length > 0) {
     const active = validActiveSubs[0];
-    await User.findByIdAndUpdate(userId, { hasActiveSubscription: true });
+    await User.findByIdAndUpdate(userId, {
+      hasActiveSubscription: true,
+      'subscription.status': 'active',
+      'subscription.plan': active.planCycle,
+      'subscription.expiresAt': active.expiresAt
+    });
     return {
       hasActiveSubscription: true,
       activeSubscription: active,
@@ -66,10 +71,16 @@ const advanceQueue = async (userId) => {
   }).sort({ expiresAt: 1 }).lean();
 
   if (refreshedActiveSubs.length > 0) {
-    await User.findByIdAndUpdate(userId, { hasActiveSubscription: true });
+    const active = refreshedActiveSubs[0];
+    await User.findByIdAndUpdate(userId, {
+      hasActiveSubscription: true,
+      'subscription.status': 'active',
+      'subscription.plan': active.planCycle,
+      'subscription.expiresAt': active.expiresAt
+    });
     return {
       hasActiveSubscription: true,
-      activeSubscription: refreshedActiveSubs[0],
+      activeSubscription: active,
       subscriptionWindows: refreshedActiveSubs.map((item) => ({
         startsAt: item.startsAt,
         expiresAt: item.expiresAt
@@ -78,7 +89,11 @@ const advanceQueue = async (userId) => {
     };
   }
 
-  await User.findByIdAndUpdate(userId, { hasActiveSubscription: false });
+  await User.findByIdAndUpdate(userId, {
+    hasActiveSubscription: false,
+    'subscription.status': 'inactive',
+    'subscription.expiresAt': null
+  });
   return {
     hasActiveSubscription: false,
     activeSubscription: null,
@@ -116,19 +131,29 @@ const verifyAccess = async (req, res, next) => {
 
     // The current entitlement must come from a dated subscription record, never a stale user flag.
     const hasActiveSubscription = queueState.hasActiveSubscription;
-    const lifetimeCategories = Array.from(new Set((lifetimeRecords || []).map((item) => item.category)));
+    const userCategoryList = (user?.purchasedCategories || []).map((item) => String(item.category).toUpperCase());
+    const lifetimeCategories = Array.from(new Set([
+      ...(lifetimeRecords || []).map((item) => String(item.category).toUpperCase()),
+      ...userCategoryList
+    ]));
     const lifetimePurchaseAt = (lifetimeRecords || [])
       .map((item) => item.createdAt)
       .filter(Boolean)
-      .sort((first, second) => new Date(first) - new Date(second))[0] || null;
+      .sort((first, second) => new Date(first) - new Date(second))[0] ||
+      (user?.purchasedCategories || [])
+        .map((item) => item.purchasedAt)
+        .filter(Boolean)
+        .sort((first, second) => new Date(first) - new Date(second))[0] || null;
     const hasOneTimeAccess = Boolean(lifetimeCategories.length || (user && user.hasOneTimeAccess));
 
     req.entitlements = {
       userId,
+      user,
       hasActiveSubscription,
       activeSubscription: queueState.activeSubscription || null,
       subscriptionWindows,
       lifetimeCategories,
+      purchasedCategories: user?.purchasedCategories || [],
       lifetimePurchaseAt,
       hasOneTimeAccess
     };

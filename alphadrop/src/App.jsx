@@ -3,10 +3,12 @@ import { useAuth } from './context/AuthContext.jsx'
 import AuthPage from './pages/AuthPage.jsx'
 import AdminDashboardPage from './pages/AdminDashboardPage.jsx'
 import AdminPackagesPage from './pages/AdminPackagesPage.jsx'
-import AdminUsersPage from './pages/AdminUsersPage.jsx'
+import AdminCategoriesPage from './pages/AdminCategoriesPage.jsx'
 import AdminPaymentsPage from './pages/AdminPaymentsPage.jsx'
 import AdminUploadPage from './pages/AdminUploadPage.jsx'
-import UserDashboardPage from './pages/UserDashboardPage.jsx'
+import UserOverviewPage from './pages/UserOverviewPage.jsx'
+import UserSubscriberDataPage from './pages/UserSubscriberDataPage.jsx'
+import UserOneTimeDataPage from './pages/UserOneTimeDataPage.jsx'
 import UserPackagesPage from './pages/UserPackagesPage.jsx'
 import UserPaymentsPage from './pages/UserPaymentsPage.jsx'
 import { Footer } from './components/ui/Footer.jsx'
@@ -63,7 +65,25 @@ function App() {
         path="/dashboard"
         element={
           <ProtectedRoute role="USER">
-            <UserDashboardPage />
+            <UserOverviewPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/dashboard/subscriber-data"
+        element={
+          <ProtectedRoute role="USER">
+            <UserSubscriberDataPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/dashboard/one-time-data"
+        element={
+          <ProtectedRoute role="USER">
+            <UserOneTimeDataPage />
           </ProtectedRoute>
         }
       />
@@ -105,10 +125,10 @@ function App() {
       />
 
       <Route
-        path="/admin/users"
+        path="/admin/categories"
         element={
           <ProtectedRoute role="ADMIN">
-            <AdminUsersPage />
+            <AdminCategoriesPage />
           </ProtectedRoute>
         }
       />
@@ -127,6 +147,14 @@ function App() {
         element={
           <ProtectedRoute role="ADMIN">
             <AdminUploadPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/upload-one-time"
+        element={
+          <ProtectedRoute role="ADMIN">
+            <AdminUploadPage oneTimeOnly />
           </ProtectedRoute>
         }
       />
