@@ -2,6 +2,7 @@ import { ChevronRight, CreditCard, DollarSign, FolderUp, Layers, LayoutDashboard
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useState } from 'react'
 import { useAuth } from '../../context/AuthContext.jsx'
+import logo from '../../assets/BDPlogo.png'
 
 const adminItems = [
   { label: 'Dashboard Overview', to: '/admin/dashboard', icon: LayoutDashboard },
@@ -32,20 +33,14 @@ export function Sidebar({ mode = 'ADMIN' }) {
   }
 
   const profileTitle = user?.role === 'ADMIN' ? 'Admin Profile' : 'User Profile'
-  const profileName = user?.name || (mode === 'ADMIN' ? 'AlphaDrop Admin' : 'AlphaDrop User')
+  const profileName = user?.name || (mode === 'ADMIN' ? 'BizDataPro Admin' : 'BizDataPro User')
   const profileEmail = user?.email || (mode === 'ADMIN' ? 'admin@alphadrop.com' : 'user@alphadrop.com')
 
   return (
     <aside className="flex w-full shrink-0 flex-col justify-between overflow-hidden rounded-xl bg-gradient-to-b from-[#071a37] to-[#0c2d64] p-3 text-white shadow-[0_18px_36px_rgba(7,26,55,0.22)] sm:p-4 xl:sticky xl:top-6 xl:h-[calc(100vh-3rem)] xl:w-[252px]">
       <div>
         <div className="mb-5 flex items-center gap-3 px-2 py-2">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#5aa7ff] to-[#0f6ce5] text-lg font-black text-white shadow-lg shadow-blue-950/30">
-            AD
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-xl font-bold tracking-tight text-white">AlphaDrop</div>
-            <div className="text-[10px] uppercase tracking-[0.18em] text-blue-200">Control panel</div>
-          </div>
+          <img src={logo} alt="BizDataPro" className="h-12 w-full max-w-[190px] rounded-lg bg-white object-contain px-2 py-1 shadow-lg shadow-blue-950/30" />
           <button
             type="button"
             onClick={() => setIsMenuOpen((current) => !current)}

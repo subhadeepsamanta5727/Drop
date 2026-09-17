@@ -13,8 +13,18 @@ import UserPackagesPage from './pages/UserPackagesPage.jsx'
 import UserPaymentsPage from './pages/UserPaymentsPage.jsx'
 import { Footer } from './components/ui/Footer.jsx'
 
+function AuthLoading() {
+  return (
+     <div className="flex min-h-screen items-center justify-center bg-slate-50" role="status" aria-label="Checking authentication">
+      <div className="h-10 w-10 animate-spin rounded-full border-4 border-blue-100 border-t-blue-600" />
+    </div>
+  )
+}
+
 function PublicRoute({ children }) {
-  const { user } = useAuth()
+  const { user, loading } = useAuth()
+
+  if (loading) return <AuthLoading />
 
   if (user) {
     return <Navigate to={user.role === 'ADMIN' ? '/admin/dashboard' : '/dashboard'} replace />
@@ -24,7 +34,9 @@ function PublicRoute({ children }) {
 }
 
 function ProtectedRoute({ children, role }) {
-  const { user } = useAuth()
+  const { user, loading } = useAuth()
+
+  if (loading) return <AuthLoading />
 
   if (!user) {
     return <Navigate to="/login" replace />

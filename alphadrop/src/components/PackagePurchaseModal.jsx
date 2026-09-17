@@ -50,7 +50,7 @@ export default function PackagePurchaseModal({ isOpen, onClose, pkg, onSuccess }
         key: razorpayKey,
         amount: Number(orderData.amountInPaise || 0),
         currency: orderData.currency || 'INR',
-        name: 'AlphaDrop',
+        name: 'BizDataPro',
         description: `Unlock ${pkg.title || categoryName} Package`,
         order_id: orderData.order.id,
         handler: async (paymentResponse) => {
@@ -73,7 +73,7 @@ export default function PackagePurchaseModal({ isOpen, onClose, pkg, onSuccess }
           }
         },
         prefill: {
-          name: user?.name || 'AlphaDrop Member',
+          name: user?.name || 'BizDataPro Member',
           email: user?.email || 'member@alphadrop.com',
         },
         theme: {

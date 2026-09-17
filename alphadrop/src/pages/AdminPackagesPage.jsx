@@ -1,5 +1,5 @@
 ﻿import { useEffect, useState } from 'react'
-import { Check, Edit, Layers, Plus, Sparkles, Trash2 } from 'lucide-react'
+import { Layers, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { Header } from '../components/ui/Header.jsx'
 import { Sidebar } from '../components/ui/Sidebar.jsx'
@@ -55,6 +55,7 @@ export default function AdminPackagesPage() {
   }
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadData()
   }, [])
 

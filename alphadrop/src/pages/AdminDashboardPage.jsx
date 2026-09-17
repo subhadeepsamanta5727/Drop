@@ -58,7 +58,7 @@ export default function AdminDashboardPage() {
             title="Welcome back"
             badge="Admin workspace"
             subtitle="Manage content delivery, member access, and payment activity at a glance."
-            userText="AlphaDrop Admin"
+            userText="BizDataPro Admin"
             userMeta="System owner"
             initials="AD"
           />

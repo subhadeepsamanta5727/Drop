@@ -2,75 +2,8 @@
 const Pricing = require('../models/Pricing');
 const Category = require('../models/Category');
 
-const DEFAULT_PACKAGES = [
-  {
-    title: 'Crypto Alpha Vault',
-    category: 'CRYPTO',
-    slug: 'crypto-alpha-vault',
-    price: 499,
-    priceInPaise: 49900,
-    description: 'Lifetime access to daily crypto signals, DeFi research, and on-chain intelligence drops.',
-    thumbnail: 'https://images.unsplash.com/photo-1621416894569-0f39ed31d247?w=600&auto=format&fit=crop&q=80',
-    isActive: true
-  },
-  {
-    title: 'Equity & Stocks Intelligence',
-    category: 'STOCKS',
-    slug: 'equity-stocks-intelligence',
-    price: 699,
-    priceInPaise: 69900,
-    description: 'Lifetime access to swing trade sheets, earnings analysis, and institutional flow alerts.',
-    thumbnail: 'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=600&auto=format&fit=crop&q=80',
-    isActive: true
-  },
-  {
-    title: 'Forex Macro Signals',
-    category: 'FOREX',
-    slug: 'forex-macro-signals',
-    price: 599,
-    priceInPaise: 59900,
-    description: 'Lifetime access to major FX pairs analysis, central bank briefings, and daily macro setups.',
-    thumbnail: 'https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?w=600&auto=format&fit=crop&q=80',
-    isActive: true
-  },
-  {
-    title: 'General Market Alpha',
-    category: 'GENERAL',
-    slug: 'general-market-alpha',
-    price: 399,
-    priceInPaise: 39900,
-    description: 'Lifetime access to daily aggregated market datasets, general summaries, and sentiment scores.',
-    thumbnail: 'https://images.unsplash.com/photo-1535320903710-d993d3d77d29?w=600&auto=format&fit=crop&q=80',
-    isActive: true
-  }
-];
-
-const seedDefaultPackagesIfEmpty = async () => {
-  const count = await Package.countDocuments();
-  if (count === 0) {
-    for (const pkg of DEFAULT_PACKAGES) {
-      await Package.create(pkg);
-      // Also ensure Pricing record exists for backward compatibility
-      await Pricing.findOneAndUpdate(
-        { planType: 'ONE_TIME', category: pkg.category },
-        {
-          $set: {
-            planType: 'ONE_TIME',
-            category: pkg.category,
-            priceInPaise: pkg.priceInPaise,
-            currency: 'INR',
-            isActive: true
-          }
-        },
-        { upsert: true, setDefaultsOnInsert: true }
-      );
-    }
-  }
-};
-
 exports.getPackages = async (req, res, next) => {
   try {
-    await seedDefaultPackagesIfEmpty();
     const packages = await Package.find({ isActive: true }).sort({ createdAt: 1 }).lean();
     res.json({
       success: true,
@@ -83,7 +16,6 @@ exports.getPackages = async (req, res, next) => {
 
 exports.getAllPackages = async (req, res, next) => {
   try {
-    await seedDefaultPackagesIfEmpty();
     const packages = await Package.find({}).sort({ createdAt: -1 }).lean();
     res.json({
       success: true,

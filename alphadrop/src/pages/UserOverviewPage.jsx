@@ -109,7 +109,7 @@ export default function UserOverviewPage() {
       <div className="mx-auto flex max-w-[1500px] flex-col gap-6 xl:flex-row">
         <Sidebar mode="USER" />
         <main className="min-w-0 flex-1">
-          <Header title="Your dashboard" badge="AlphaDrop" subtitle="Your access, latest releases, and purchase activity in one place." />
+          <Header title="Your dashboard" badge="BizDataPro" subtitle="Your access, latest releases, and purchase activity in one place." />
 
           <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" aria-label="Account summary">
             {summaryCards.map(({ title, value, detail, to, icon: Icon, iconClass, valueClass, action }) => (

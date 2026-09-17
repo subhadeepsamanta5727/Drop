@@ -3,6 +3,7 @@ import { Eye, EyeOff, ShieldCheck } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useAuth } from '../context/AuthContext.jsx'
+import logo from '../assets/BDPlogo.png'
 import api, { setStoredToken } from '../services/api.js'
 import heroImage from '../assets/hero.png'
 
@@ -84,7 +85,7 @@ export default function AuthPage({ mode: initialMode = 'login' }) {
                   A
                 </div>
                 <div>
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.26em] text-blue-200">AlphaDrop</div>
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.26em] text-blue-200">BizDataPro</div>
                   <div className="text-lg font-semibold tracking-tight text-white">Premium Access</div>
                 </div>
               </div>
@@ -105,7 +106,7 @@ export default function AuthPage({ mode: initialMode = 'login' }) {
                 <div className="flex justify-center py-2">
                   <img
                     src={heroImage}
-                    alt="Layered AlphaDrop content platform"
+                    alt="BizDataPro content platform"
                     className="h-36 w-44 object-contain drop-shadow-[0_18px_24px_rgba(96,165,250,0.35)]"
                   />
                 </div>
@@ -127,10 +128,7 @@ export default function AuthPage({ mode: initialMode = 'login' }) {
           <section className="flex items-center justify-center bg-white p-6 sm:p-8 lg:p-10">
             <div className="w-full max-w-[440px]">
               <div className="mb-8 flex items-center justify-between">
-                <div className="flex items-center gap-2 text-xl font-bold text-zinc-900">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-100 text-blue-700">A</div>
-                  AlphaDrop
-                </div>
+                <img src={logo} alt="BizDataPro" className="h-12 w-auto max-w-[250px] object-contain object-left" />
                 <button className="text-sm font-medium text-zinc-500">Home</button>
               </div>
 
@@ -238,7 +236,7 @@ export default function AuthPage({ mode: initialMode = 'login' }) {
               </form>
 
               <p className="mt-6 text-center text-sm text-zinc-600">
-                {mode === 'login' ? 'New to AlphaDrop?' : 'Already have an account?'}{' '}
+                {mode === 'login' ? 'New to BizDataPro?' : 'Already have an account?'}{' '}
                 <button type="button" className="font-semibold text-blue-700" onClick={() => setMode((current) => (current === 'login' ? 'register' : 'login'))}>
                   {mode === 'login' ? 'Create an account' : 'Sign in'}
                 </button>

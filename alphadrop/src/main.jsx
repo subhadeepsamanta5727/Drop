@@ -6,6 +6,13 @@ import { Toaster } from 'sonner'
 import './index.css'
 import App from './App.jsx'
 import { AuthProvider } from './context/AuthContext.jsx'
+import favicon from './assets/BizDataPro-icon.png'
+
+const faviconLink = document.querySelector('link[rel="icon"]')
+if (faviconLink) {
+  faviconLink.href = favicon
+  faviconLink.type = 'image/png'
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {

@@ -6,6 +6,7 @@ const Package = require('../models/Package');
 const Category = require('../models/Category');
 const Pricing = require('../models/Pricing');
 const User = require('../models/User');
+const bcrypt = require('bcryptjs');
 const Payment = require('../models/Payment');
 const Subscription = require('../models/Subscription');
 const OneTime = require('../models/OneTime');
@@ -751,10 +752,11 @@ exports.createUser = async (req, res, next) => {
       throw error;
     }
 
+    const hashedPassword = await bcrypt.hash(String(password), 12);
     const document = await User.create({
       name: String(name).trim(),
       email: String(email).trim().toLowerCase(),
-      password: String(password),
+      password: hashedPassword,
       role: role === 'ADMIN' ? 'ADMIN' : 'USER',
       hasActiveSubscription: Boolean(hasActiveSubscription),
       hasOneTimeAccess: Boolean(hasOneTimeAccess),

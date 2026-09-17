@@ -168,10 +168,10 @@ export default function UserPackagesPage() {
         key: razorpayKey,
         amount: Number(orderData.amountInPaise || 0),
         currency: orderData.currency || 'INR',
-        name: 'AlphaDrop',
+        name: 'BizDataPro',
         description: card.planType === 'ONE_TIME_PACKAGE'
           ? `Unlock ${card.category} Lifetime Package`
-          : 'AlphaDrop Subscription',
+          : 'BizDataPro Subscription',
         order_id: orderData.order.id,
         handler: async (paymentResponse) => {
           try {
@@ -198,7 +198,7 @@ export default function UserPackagesPage() {
           }
         },
         prefill: {
-          name: user?.name || 'AlphaDrop User',
+          name: user?.name || 'BizDataPro User',
           email: user?.email || 'user@alphadrop.com',
         },
         theme: {
