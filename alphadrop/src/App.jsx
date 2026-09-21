@@ -11,6 +11,9 @@ import UserSubscriberDataPage from './pages/UserSubscriberDataPage.jsx'
 import UserOneTimeDataPage from './pages/UserOneTimeDataPage.jsx'
 import UserPackagesPage from './pages/UserPackagesPage.jsx'
 import UserPaymentsPage from './pages/UserPaymentsPage.jsx'
+import PaymentPolicyPage from './pages/PaymentPolicyPage.jsx'
+import PrivacyPolicyPage from './pages/PrivacyPolicyPage.jsx'
+import ContactPage from './pages/ContactPage.jsx'
 import { Footer } from './components/ui/Footer.jsx'
 
 function AuthLoading() {
@@ -72,6 +75,10 @@ function App() {
           </PublicRoute>
         }
       />
+
+      <Route path="/payment-policy" element={<PaymentPolicyPage />} />
+      <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
+      <Route path="/contact" element={<ContactPage />} />
 
       <Route
         path="/dashboard"

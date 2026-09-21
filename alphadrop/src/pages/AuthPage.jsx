@@ -138,27 +138,6 @@ export default function AuthPage({ mode: initialMode = 'login' }) {
                 <p className="mt-2 text-sm leading-6 text-zinc-600">{subtitle}</p>
               </div>
 
-              <div className="mb-6 grid grid-cols-2 gap-2 rounded-2xl bg-zinc-100 p-1.5">
-                <button
-                  type="button"
-                  onClick={() => setMode('login')}
-                  className={`rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
-                    mode === 'login' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-600'
-                  }`}
-                >
-                  Sign in
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMode('register')}
-                  className={`rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
-                    mode === 'register' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-600'
-                  }`}
-                >
-                  Register
-                </button>
-              </div>
-
               <form onSubmit={handleSubmit} className="space-y-5">
                 {mode === 'register' && (
                   <label className="block text-sm font-medium text-zinc-700">
@@ -233,14 +212,28 @@ export default function AuthPage({ mode: initialMode = 'login' }) {
                 <button type="submit" disabled={submitLoading} className="w-full rounded-xl bg-gradient-to-r from-[#0f6ce5] to-[#0c2d64] px-4 py-3 text-base font-bold text-white shadow-lg shadow-blue-900/25 transition hover:brightness-105 disabled:opacity-70">
                   {submitLoading ? 'Please wait...' : mode === 'login' ? 'Sign in' : 'Create account'}
                 </button>
+
+                {mode === 'login' && (
+                  <p className="pt-1 text-center text-sm text-zinc-600">
+                    Don&apos;t have an account?{' '}
+                    <button
+                      type="button"
+                      className="font-semibold text-blue-700 underline-offset-4 hover:underline"
+                      onClick={() => navigate('/register')}
+                    >
+                      Register
+                    </button>
+                  </p>
+                )}
               </form>
 
-              <p className="mt-6 text-center text-sm text-zinc-600">
-                {mode === 'login' ? 'New to BizDataPro?' : 'Already have an account?'}{' '}
-                <button type="button" className="font-semibold text-blue-700" onClick={() => setMode((current) => (current === 'login' ? 'register' : 'login'))}>
-                  {mode === 'login' ? 'Create an account' : 'Sign in'}
-                </button>
-              </p>
+              <div className="mt-6 border-t border-zinc-200 pt-4">
+                <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs text-zinc-500">
+                  <button type="button" onClick={() => navigate('/payment-policy')} className="transition hover:text-blue-700">Payment Policy</button>
+                  <button type="button" onClick={() => navigate('/privacy-policy')} className="transition hover:text-blue-700">Privacy Policy</button>
+                  <button type="button" onClick={() => navigate('/contact')} className="transition hover:text-blue-700">Contact Us</button>
+                </div>
+              </div>
             </div>
           </section>
         </div>

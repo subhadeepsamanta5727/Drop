@@ -51,6 +51,7 @@ app.get('/api/health', (_req, res) => {
 });
 
 app.use('/api/auth', require('./routes/authRoutes'));
+app.use('/api/contact', require('./routes/contactRoutes'));
 app.use('/api/payment', require('./routes/paymentRoutes'));
 app.use('/api/webhook', require('./routes/webhookRoutes'));
 app.use('/api/packages', require('./routes/packageRoutes'));
