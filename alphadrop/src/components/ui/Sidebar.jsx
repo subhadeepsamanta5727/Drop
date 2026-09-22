@@ -46,7 +46,7 @@ export function Sidebar({ mode = 'ADMIN' }) {
             onClick={() => setIsMenuOpen((current) => !current)}
             aria-label={isMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
             aria-expanded={isMenuOpen}
-            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-blue-100 transition hover:bg-white/10 xl:hidden"
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-blue-300/40 bg-[#1677ff] text-white transition hover:bg-[#2f8bff] xl:hidden"
           >
             <MoreVertical size={20} />
           </button>

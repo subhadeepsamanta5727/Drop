@@ -14,6 +14,7 @@ import UserPaymentsPage from './pages/UserPaymentsPage.jsx'
 import PaymentPolicyPage from './pages/PaymentPolicyPage.jsx'
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage.jsx'
 import ContactPage from './pages/ContactPage.jsx'
+import HomePage from './components/HomePage.jsx'
 import { Footer } from './components/ui/Footer.jsx'
 
 function AuthLoading() {
@@ -56,7 +57,7 @@ function App() {
   return (
     <>
       <Routes>
-        <Route path="/" element={<Navigate to="/login" replace />} />
+        <Route path="/" element={<HomePage />} />
 
       <Route
         path="/login"
